@@ -1,0 +1,76 @@
+#include "/home/terra/TerraNG/terra/TerraNet.defs"
+
+var ushort nodeId = getNodeId();
+pktype usrMsg from radioMsg with
+    var ubyte[4]  d8;
+    var ushort[4] d16;
+    var ulong[2]  d32;
+end
+ 
+var usrMsg sndData;
+var usrMsg recData;
+var usrMsg passbyData;
+var ushort parent = 1;
+var ubyte cycleId = 0;
+var ubyte queueRet;
+var ubyte ackPassBy;
+ 
+//Prepare the tree
+if(nodeId == 11) then
+	await 1s;
+	sndData.type=1;
+	sndData.target = BROADCAST;
+	sndData.source = nodeId;
+	emit SEND(sndData);
+    	await SEND_DONE;
+else 
+	recData = await RECEIVE;
+	parent = recData.source;
+	recData.source = nodeId;    
+	recData.target = BROADCAST;
+    	emit SEND(recData);
+    	await SEND_DONE;
+end
+
+//Wair for the tree completition
+await 2s;
+
+par do
+	//Sends the temperature read from time to time
+	//Delay time is calculated from a prime number * nodeId
+	loop do
+		await (nodeId*173)ms;
+		if cycleId < 10 then        
+			emit REQ_TEMP();
+			var usrMsg newData;
+			newData.d16[0] = await TEMP;
+			newData.target = parent;
+			newData.source = nodeId;
+			newData.d8[0] = cycleId;
+			//After preparing the message, put it into the node msgQueue
+			queueRet = qPut(newData);
+			inc cycleId;					
+		end
+	end
+with
+	loop do 
+		//Trail that receive a msg from child node and put it into the msgQueue
+		passbyData = await RECEIVE;
+    		passbyData.target = parent;
+		queueRet = qPut(passbyData);
+	end 
+with
+	loop do 
+		//If msgQueue is not empty, send the data and wait for ACK
+		if(qSize() > 0) then
+			queueRet = qGet(recData);		
+			emit SEND_ACK(recData);
+			ackPassBy = await SEND_DONE_ACK;
+			//If ack is not received, put the message into the queue again(retry)
+			if not ackPassBy then 
+				queueRet = qPut(recData);
+			end
+		end
+		await 20ms;
+	end
+end
