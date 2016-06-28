@@ -1,0 +1,179 @@
+#include "arduino.ceu"
+
+// colors' definition
+#define CG 1
+#define CY 2
+#define CB 3
+#define CR 4
+
+output int PIN08; //LED VERDE
+output int PIN09; //LED AMARELO
+output int PIN10; //LED AZUL
+output int PIN11; //LED VERMELHO
+ 
+input int PIN13; //P1 VERDE
+input int PIN12; //P1 AMARELO
+input int PIN02; //P1 AZUL
+input int PIN03; //P1 VERMELHO
+
+input int PIN04; //P2 VERDE
+input int PIN05; //P2 AMARELO
+input int PIN06; //P2 AZUL
+input int PIN07; //P2 VERMELHO
+
+_pinMode(_A3, _OUTPUT);
+_pinMode(_A4, _OUTPUT);
+_pinMode(_A5, _OUTPUT);
+
+_randomSeed(_analogRead(_A0));
+
+class Player with
+	var int score;
+	var int pNum;
+	event int color;
+do
+	loop do
+		par/or do
+			if this.pNum == 1 then
+				await PIN13 until _HIGH;
+				emit this.color => CG;
+			else
+				await PIN04 until _HIGH;
+				emit this.color => CG;				
+			end
+		with
+			if this.pNum == 1 then
+				await PIN12 until _HIGH;
+				emit this.color => CY;
+
+			else
+				await PIN05 until _HIGH;
+				emit this.color =>(CY);
+				
+			end
+		with
+			if this.pNum == 1 then
+				await PIN02 until _HIGH;
+				emit this.color =>(CB);
+				
+			else
+				await PIN06 until _HIGH;
+				emit this.color =>(CB);
+				
+			end
+		with
+			if this.pNum == 1 then 
+				await PIN03 until _HIGH;
+				emit this.color =>(CR);
+				
+			else
+				await PIN07 until _HIGH;
+				emit this.color =>(CR);
+				
+			end
+		end
+		await 300ms;
+	end
+end
+
+class GameScore with
+	var Player& p1;
+	var Player& p2;
+	var int activeColor;
+do
+	var int lastActiveColor = 0;
+	loop do
+		par/or do
+			
+			emit PIN08 => _LOW;
+			emit PIN09 => _LOW;
+			emit PIN10 => _LOW;
+			emit PIN11 => _LOW;
+			
+			activeColor = _random(1, 5);
+
+			if activeColor == lastActiveColor then
+				await 100ms;
+			end
+			
+			lastActiveColor = activeColor;
+
+			if activeColor == 1 then emit PIN08 => _HIGH; end
+		   if activeColor == 2 then emit PIN09 => _HIGH; end
+		   if activeColor == 3 then emit PIN10 => _HIGH; end
+		   if activeColor == 4 then emit PIN11 => _HIGH; end
+
+			await FOREVER;
+		with
+			loop do
+				par/or do
+					var int p1Color = await p1.color;
+					if p1Color == activeColor then
+						p1.score = p1.score + 1;
+						break;
+					else
+						p1.score = p1.score - 1;
+					end
+				with
+					var int p2Color = await p2.color;
+					if p2Color == activeColor then
+						p2.score = p2.score + 1;
+						break;
+					else
+						p2.score = p2.score - 1;
+					end
+				end
+			end
+		with 
+			loop do
+				var int rScore = p2.score - p1.score;
+				
+				if rScore < -5 then
+					_digitalWrite(_A3, _LOW);
+					_digitalWrite(_A4, _LOW);
+					_digitalWrite(_A5, _LOW);
+				end
+				if rScore >= -5 and rScore < 0 then
+					_digitalWrite(_A3, _HIGH);
+					_digitalWrite(_A4, _LOW);
+					_digitalWrite(_A5, _LOW);
+				end
+				if rScore == 0 then
+					_digitalWrite(_A3, _LOW);
+					_digitalWrite(_A4, _HIGH);
+					_digitalWrite(_A5, _LOW);
+				end
+				if rScore > 0 and rScore <= 5 then
+					_digitalWrite(_A3, _HIGH);
+					_digitalWrite(_A4, _HIGH);
+					_digitalWrite(_A5, _LOW);
+				end
+				if rScore > 5 then
+					_digitalWrite(_A3, _LOW);
+					_digitalWrite(_A4, _LOW);
+					_digitalWrite(_A5, _HIGH);
+				end
+				await 100ms;
+			end
+		end	
+	end
+end
+
+//Players
+var Player p1 with
+	this.score = 0;
+	this.pNum = 1;
+end;
+
+var Player p2 with
+	this.score = 0;
+	this.pNum = 2;
+end;
+
+var GameScore gs with
+	this.p1 = &p1;
+	this.p2 = &p2;
+	this.activeColor = 0;
+end;
+
+await FOREVER;
